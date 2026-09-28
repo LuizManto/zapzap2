@@ -39,7 +39,7 @@ class ConversaModel extends Model
                     SELECT COUNT(*)
                     FROM mensagens m2
                     WHERE m2.id_conversa = c.id_conversa
-                      AND m2.id_mensagem > IFNULL(cu.ultima_mensagem_lida_id, 0)
+                      AND m2.id_mensagem > COALESCE(cu.ultima_mensagem_lida_id, 0)
                       AND m2.id_remetente != ?
                 ) AS nao_lidas
             FROM conversas_usuarios cu
@@ -117,7 +117,7 @@ class ConversaModel extends Model
         $this->db->table('conversas_usuarios')->insert([
             'id_conversa' => $idConversa,
             'id_usuario'  => $idUsuario,
-            'eh_admin'    => $ehAdmin ? 1 : 0,
+            'eh_admin'    => $ehAdmin, // booleano de verdade: o Postgres não aceita 0/1 em coluna BOOLEAN
             'entrou_em'   => date('Y-m-d H:i:s'),
         ]);
     }
