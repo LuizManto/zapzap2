@@ -19,8 +19,16 @@ class ConversaModel extends Model
     protected $updatedField  = '';
 
     /**
-     * Lista as conversas de um usuário para a coluna da esquerda,
-     * já trazendo nome/foto exibidos, última mensagem e total de não lidas.
+     * O Postgres devolve booleanos como 't' / 'f' (texto). No JS, 'f' seria "verdadeiro",
+     * então convertemos aqui pra um booleano de verdade antes de mandar pra tela.
+     */
+    private function paraBool($valor): bool
+    {
+        return $valor === true || $valor === 't' || $valor === 1 || $valor === '1' || $valor === 'true';
+    }
+
+    /**
+     * Lista as conversas (já ACEITAS) do usuário para a coluna da esquerda.
      */
     public function listarConversasDoUsuario(int $idUsuario): array
     {
@@ -32,15 +40,16 @@ class ConversaModel extends Model
                 c.foto,
                 CASE WHEN c.tipo = 'individual' THEN outro.nome   ELSE c.titulo END AS nome_exibido,
                 CASE WHEN c.tipo = 'individual' THEN outro.avatar ELSE c.foto   END AS foto_exibida,
-                ultima.corpo      AS ultima_mensagem,
+                CASE WHEN ultima.apagada_em IS NOT NULL THEN 'Mensagem apagada' ELSE ultima.corpo END AS ultima_mensagem,
                 ultima.tipo       AS ultima_mensagem_tipo,
-                ultima.criado_em AS ultima_mensagem_em,
+                ultima.criado_em  AS ultima_mensagem_em,
                 (
                     SELECT COUNT(*)
                     FROM mensagens m2
                     WHERE m2.id_conversa = c.id_conversa
                       AND m2.id_mensagem > COALESCE(cu.ultima_mensagem_lida_id, 0)
                       AND m2.id_remetente != ?
+                      AND m2.apagada_em IS NULL
                 ) AS nao_lidas
             FROM conversas_usuarios cu
             INNER JOIN conversas c ON c.id_conversa = cu.id_conversa
@@ -52,7 +61,8 @@ class ConversaModel extends Model
             LEFT JOIN mensagens ultima
                    ON ultima.id_mensagem = (SELECT MAX(id_mensagem) FROM mensagens WHERE id_conversa = c.id_conversa)
             WHERE cu.id_usuario = ?
-            ORDER BY ultima.criado_em DESC, c.criado_em DESC
+              AND cu.status = 'aceito'
+            ORDER BY COALESCE(ultima.criado_em, c.criado_em) DESC
         ";
 
         return $this->db->query($sql, [$idUsuario, $idUsuario])->getResultArray();
@@ -91,9 +101,9 @@ class ConversaModel extends Model
     }
 
     /**
-     * Cria uma conversa em grupo com o criador como admin e os membros informados.
+     * Cria o grupo. O criador entra direto como admin; os demais recebem CONVITE (pendente).
      */
-    public function criarGrupo(string $titulo, int $idCriador, array $idsMembros): int
+    public function criarGrupo(string $titulo, int $idCriador, array $idsConvidados): int
     {
         $idConversa = $this->insert([
             'tipo'       => 'grupo',
@@ -101,35 +111,169 @@ class ConversaModel extends Model
             'criado_por' => $idCriador,
         ]);
 
-        $this->adicionarParticipante((int) $idConversa, $idCriador, ehAdmin: true);
-
-        foreach ($idsMembros as $idMembro) {
-            if ((int) $idMembro !== $idCriador) {
-                $this->adicionarParticipante((int) $idConversa, (int) $idMembro);
-            }
-        }
+        $this->adicionarParticipante((int) $idConversa, $idCriador, true);
+        $this->convidarParaGrupo((int) $idConversa, $idCriador, $idsConvidados);
 
         return (int) $idConversa;
     }
 
-    public function adicionarParticipante(int $idConversa, int $idUsuario, bool $ehAdmin = false): void
-    {
+    public function adicionarParticipante(
+        int $idConversa,
+        int $idUsuario,
+        bool $ehAdmin = false,
+        string $status = 'aceito',
+        ?int $convidadoPor = null
+    ): void {
         $this->db->table('conversas_usuarios')->insert([
-            'id_conversa' => $idConversa,
-            'id_usuario'  => $idUsuario,
-            'eh_admin'    => $ehAdmin, // booleano de verdade: o Postgres não aceita 0/1 em coluna BOOLEAN
-            'entrou_em'   => date('Y-m-d H:i:s'),
+            'id_conversa'   => $idConversa,
+            'id_usuario'    => $idUsuario,
+            'eh_admin'      => $ehAdmin, // booleano de verdade (Postgres não aceita 0/1 em coluna BOOLEAN)
+            'status'        => $status,
+            'convidado_por' => $convidadoPor,
+            'entrou_em'     => date('Y-m-d H:i:s'),
         ]);
     }
 
     /**
-     * Confirma se o usuário faz parte da conversa (usado antes de mostrar o chat ou aceitar mensagens).
+     * Cria convites pendentes. Ignora ids inválidos, o próprio convidador e quem já está
+     * no grupo (aceito ou com convite pendente). Retorna quantos convites foram criados.
+     */
+    public function convidarParaGrupo(int $idConversa, int $idQuemConvida, array $idsUsuarios): int
+    {
+        $ids       = array_unique(array_map('intval', $idsUsuarios));
+        $convidados = 0;
+
+        foreach ($ids as $id) {
+            if ($id <= 0 || $id === $idQuemConvida) {
+                continue;
+            }
+
+            $usuarioExiste = $this->db->table('usuarios')->where('id_usuario', $id)->countAllResults();
+            if (! $usuarioExiste) {
+                continue;
+            }
+
+            $jaEstaNoGrupo = $this->db->table('conversas_usuarios')
+                ->where('id_conversa', $idConversa)
+                ->where('id_usuario', $id)
+                ->countAllResults();
+            if ($jaEstaNoGrupo) {
+                continue;
+            }
+
+            $this->adicionarParticipante($idConversa, $id, false, 'pendente', $idQuemConvida);
+            $convidados++;
+        }
+
+        return $convidados;
+    }
+
+    /**
+     * Convites de grupo que o usuário recebeu e ainda não respondeu.
+     */
+    public function listarConvitesPendentes(int $idUsuario): array
+    {
+        $sql = "
+            SELECT c.id_conversa, c.titulo, u.nome AS convidado_por_nome
+            FROM conversas_usuarios cu
+            INNER JOIN conversas c ON c.id_conversa = cu.id_conversa
+            LEFT JOIN usuarios u ON u.id_usuario = cu.convidado_por
+            WHERE cu.id_usuario = ? AND cu.status = 'pendente'
+            ORDER BY cu.entrou_em DESC
+        ";
+
+        return $this->db->query($sql, [$idUsuario])->getResultArray();
+    }
+
+    public function aceitarConvite(int $idConversa, int $idUsuario): bool
+    {
+        // começa "lido" até a última mensagem existente, pra não mostrar o histórico inteiro como não lido
+        $ultimoId = $this->db->table('mensagens')
+            ->selectMax('id_mensagem')
+            ->where('id_conversa', $idConversa)
+            ->get()
+            ->getRow('id_mensagem');
+
+        $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idUsuario)
+            ->where('status', 'pendente')
+            ->update([
+                'status'                  => 'aceito',
+                'entrou_em'               => date('Y-m-d H:i:s'),
+                'ultima_mensagem_lida_id' => $ultimoId,
+            ]);
+
+        return $this->db->affectedRows() > 0;
+    }
+
+    public function recusarConvite(int $idConversa, int $idUsuario): bool
+    {
+        $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idUsuario)
+            ->where('status', 'pendente')
+            ->delete();
+
+        return $this->db->affectedRows() > 0;
+    }
+
+    /**
+     * Dados da conversa vistos por um participante ACEITO (tipo, título e se ele é admin).
+     * Retorna null se ele não participa.
+     */
+    public function detalhes(int $idConversa, int $idUsuario): ?array
+    {
+        $sql = "
+            SELECT c.id_conversa, c.tipo, c.titulo, cu.eh_admin
+            FROM conversas c
+            INNER JOIN conversas_usuarios cu ON cu.id_conversa = c.id_conversa
+            WHERE c.id_conversa = ? AND cu.id_usuario = ? AND cu.status = 'aceito'
+        ";
+
+        $linha = $this->db->query($sql, [$idConversa, $idUsuario])->getRowArray();
+
+        if (! $linha) {
+            return null;
+        }
+
+        $linha['eh_admin'] = $this->paraBool($linha['eh_admin']);
+
+        return $linha;
+    }
+
+    /**
+     * Membros do grupo (inclui quem ainda está com convite pendente).
+     */
+    public function listarMembros(int $idConversa): array
+    {
+        $sql = "
+            SELECT u.id_usuario, u.nome, u.avatar, cu.eh_admin, cu.status
+            FROM conversas_usuarios cu
+            INNER JOIN usuarios u ON u.id_usuario = cu.id_usuario
+            WHERE cu.id_conversa = ?
+            ORDER BY cu.status ASC, u.nome ASC
+        ";
+
+        $membros = $this->db->query($sql, [$idConversa])->getResultArray();
+
+        foreach ($membros as &$membro) {
+            $membro['eh_admin'] = $this->paraBool($membro['eh_admin']);
+        }
+        unset($membro);
+
+        return $membros;
+    }
+
+    /**
+     * Confirma se o usuário faz parte da conversa (só conta quem já ACEITOU).
      */
     public function usuarioParticipaDaConversa(int $idConversa, int $idUsuario): bool
     {
         return (bool) $this->db->table('conversas_usuarios')
             ->where('id_conversa', $idConversa)
             ->where('id_usuario', $idUsuario)
+            ->where('status', 'aceito')
             ->countAllResults();
     }
 
