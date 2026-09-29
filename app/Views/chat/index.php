@@ -32,20 +32,35 @@
     #convites .convite { padding: 10px 14px; background: #fff8e1; border-bottom: 1px solid #f0e2b6; font-size: 13px; }
     #convites .botoes { margin-top: 6px; display: flex; gap: 6px; }
 
+    #busca-conversas { padding: 8px 10px; border-bottom: 1px solid #eee; }
+    #busca-conversas input { width: 100%; padding: 7px; border: 1px solid #ccc; border-radius: 4px; }
+
     #lista-conversas { flex: 1; overflow-y: auto; }
-    .item-conversa { padding: 12px 14px; display: flex; justify-content: space-between; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+    .item-conversa { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
     .item-conversa:hover, .item-conversa.ativa { background: #f0f2f5; }
     .item-conversa .nome { font-weight: bold; font-size: 14px; }
-    .item-conversa .ultima { font-size: 13px; color: #667781; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-conversa .ultima { font-size: 13px; color: #667781; max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .badge { background: #25d366; color: #fff; border-radius: 50%; font-size: 12px; padding: 2px 7px; height: fit-content; }
+    .item-conversa .lado-direito { display: flex; align-items: center; gap: 6px; }
+    .item-conversa .apagar { visibility: hidden; border: none; background: none; color: #999; font-size: 15px; padding: 2px 4px; }
+    .item-conversa:hover .apagar { visibility: visible; }
+    .item-conversa .apagar:hover { color: #b3261e; }
 
     /* ---- coluna direita ---- */
     #coluna-chat { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     #sem-conversa { margin: auto; color: #667781; }
     #cabecalho-chat { padding: 12px 14px; background: #f0f2f5; font-weight: bold; display: none; justify-content: space-between; align-items: center; }
     #painel-grupo { background: #fafafa; }
-    #lista-membros div { padding: 4px 0; font-size: 14px; }
-    #lista-membros .pendente { color: #999; }
+    #painel-grupo .acoes-grupo { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+    .linha-membro { padding: 5px 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f0f0; }
+    .linha-membro.pendente { color: #999; }
+    .linha-membro .acoes-membro { display: flex; gap: 6px; }
+    .linha-membro .acoes-membro button { border: none; background: none; font-size: 12px; color: #667781; text-decoration: underline; padding: 0; }
+    .linha-membro .acoes-membro button:hover { color: #000; }
+
+    #carregar-mais { display: none; text-align: center; padding: 6px; }
+    #carregar-mais button { border: none; background: none; color: #075e54; font-size: 13px; text-decoration: underline; }
+
     #mensagens { flex: 1; padding: 16px; overflow-y: auto; display: none; flex-direction: column; gap: 6px; }
 
     .balao { max-width: 60%; padding: 8px 12px; border-radius: 8px; font-size: 14px; word-wrap: break-word; }
@@ -61,9 +76,12 @@
     .balao .acoes button { border: none; background: none; padding: 0; font-size: 11px; color: #667781; text-decoration: underline; }
     .balao .acoes button:hover { color: #000; }
 
-    #form-envio { display: none; padding: 12px; background: #f0f2f5; gap: 8px; }
-    #form-envio input { flex: 1; padding: 10px; border-radius: 20px; border: 1px solid #ccc; }
-    #form-envio button { border: none; background: #25d366; color: #fff; padding: 0 18px; border-radius: 20px; }
+    #form-envio { display: none; padding: 12px; background: #f0f2f5; gap: 8px; align-items: flex-end; }
+    #input-mensagem {
+        flex: 1; padding: 10px 14px; border-radius: 18px; border: 1px solid #ccc;
+        resize: none; max-height: 120px; font-family: inherit; font-size: 14px; line-height: 1.3;
+    }
+    #form-envio button { border: none; background: #25d366; color: #fff; padding: 10px 18px; border-radius: 20px; }
 </style>
 </head>
 <body>
@@ -76,8 +94,13 @@
             <div class="botoes">
                 <button class="btn-verde" id="btn-nova-conversa">+ Conversa</button>
                 <button class="btn-verde" id="btn-novo-grupo">+ Grupo</button>
+                <a id="link-perfil" href="/perfil">Perfil</a>
                 <a id="link-sair" href="/logout">Sair</a>
             </div>
+        </div>
+
+        <div id="busca-conversas">
+            <input type="text" id="filtro-conversas" placeholder="Buscar nas minhas conversas...">
         </div>
 
         <!-- nova conversa individual -->
@@ -114,6 +137,10 @@
         </div>
 
         <div class="painel" id="painel-grupo">
+            <div class="acoes-grupo">
+                <button type="button" class="btn-cinza" id="btn-renomear-grupo" style="display:none;">Renomear grupo</button>
+                <button type="button" class="btn-vermelho" id="btn-sair-grupo">Sair do grupo</button>
+            </div>
             <div id="lista-membros"></div>
             <div id="area-convidar" style="display:none; margin-top:8px;">
                 <div class="linha">
@@ -124,10 +151,11 @@
             </div>
         </div>
 
+        <div id="carregar-mais"><button type="button" id="btn-carregar-mais">Carregar mensagens mais antigas</button></div>
         <div id="mensagens"></div>
 
         <form id="form-envio">
-            <input type="text" id="input-mensagem" placeholder="Digite uma mensagem" autocomplete="off">
+            <textarea id="input-mensagem" rows="1" placeholder="Digite uma mensagem (Enter envia, Shift+Enter quebra linha)" autocomplete="off"></textarea>
             <button type="submit">Enviar</button>
         </form>
     </div>
@@ -140,8 +168,11 @@ const $ = (id) => document.getElementById(id);
 
 let conversaAtual = null;      // { id, tipo, ehAdmin, titulo }
 let ultimoIdMensagem = 0;
+let primeiroIdMensagem = null; // id da mensagem mais antiga já carregada (pro "carregar mais")
+let semMaisAntigas = false;
 let desdeServidor = '';        // hora do servidor na última sincronização (pra achar edições/exclusões)
 let intervaloPolling = null;
+let conversasCache = [];       // último resultado de /chat/conversas, pra filtrar sem bater no servidor de novo
 const grupoEscolhidos = new Map(); // id_usuario -> nome
 
 // ---------- util ----------
@@ -222,11 +253,22 @@ function alternarPainel(id) {
 
 async function carregarConversas() {
     try {
-        const conversas = await api('/chat/conversas');
-        const container = $('lista-conversas');
-        container.innerHTML = '';
+        conversasCache = await api('/chat/conversas');
+        desenharConversas();
+        atualizarTituloComNaoLidas();
+    } catch (erro) {
+        console.error('Erro ao carregar conversas:', erro);
+    }
+}
 
-        conversas.forEach(c => {
+function desenharConversas() {
+    const filtro = $('filtro-conversas').value.trim().toLowerCase();
+    const container = $('lista-conversas');
+    container.innerHTML = '';
+
+    conversasCache
+        .filter(c => (c.nome_exibido ?? '').toLowerCase().includes(filtro))
+        .forEach(c => {
             const div = document.createElement('div');
             div.className = 'item-conversa' + (conversaAtual && c.id_conversa == conversaAtual.id ? ' ativa' : '');
 
@@ -240,15 +282,50 @@ async function carregarConversas() {
                     <div class="nome">${escapeHtml(nome)}</div>
                     <div class="ultima">${escapeHtml(ultima)}</div>
                 </div>
-                ${naoLidas > 0 ? `<span class="badge">${naoLidas}</span>` : ''}
+                <div class="lado-direito">
+                    ${naoLidas > 0 ? `<span class="badge">${naoLidas}</span>` : ''}
+                    <button type="button" class="apagar" title="Apagar conversa" data-acao="apagar">✕</button>
+                </div>
             `;
 
             div.addEventListener('click', () => abrirConversa(c.id_conversa, nome));
+
+            div.querySelector('[data-acao=apagar]').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (! confirm(`Apagar a conversa com ${c.nome_exibido}? Ela some só pra você.`)) return;
+
+                try {
+                    await post(`/chat/${c.id_conversa}/ocultar`);
+
+                    if (conversaAtual && conversaAtual.id == c.id_conversa) {
+                        fecharConversaAtual();
+                    }
+
+                    carregarConversas();
+                } catch (erro) { alert(erro.message); }
+            });
+
             container.appendChild(div);
         });
-    } catch (erro) {
-        console.error('Erro ao carregar conversas:', erro);
-    }
+}
+
+$('filtro-conversas').addEventListener('input', desenharConversas);
+
+function atualizarTituloComNaoLidas() {
+    const total = conversasCache.reduce((soma, c) => soma + parseInt(c.nao_lidas || 0), 0);
+    document.title = total > 0 ? `(${total}) zapzap2` : 'zapzap2';
+}
+
+function fecharConversaAtual() {
+    conversaAtual = null;
+    if (intervaloPolling) clearInterval(intervaloPolling);
+
+    $('sem-conversa').style.display = 'block';
+    $('cabecalho-chat').style.display = 'none';
+    $('mensagens').style.display = 'none';
+    $('form-envio').style.display = 'none';
+    $('painel-grupo').style.display = 'none';
+    $('carregar-mais').style.display = 'none';
 }
 
 // ---------- convites de grupo (esquerda) ----------
@@ -308,16 +385,20 @@ async function abrirConversa(idConversa, nomeExibido) {
         };
         desdeServidor = dados.agora;
         ultimoIdMensagem = 0;
+        primeiroIdMensagem = null;
+        semMaisAntigas = false;
 
         $('sem-conversa').style.display = 'none';
         $('cabecalho-chat').style.display = 'flex';
         $('mensagens').style.display = 'flex';
         $('form-envio').style.display = 'flex';
         $('titulo-chat').textContent = nomeExibido;
+        $('input-mensagem').style.height = 'auto';
 
-        // painel de membros só existe em grupo
+        // painel de membros/admin só existe em grupo
         $('painel-grupo').style.display = 'none';
         $('btn-membros').style.display = conversaAtual.tipo === 'grupo' ? 'inline-block' : 'none';
+        $('btn-renomear-grupo').style.display = conversaAtual.ehAdmin ? 'inline-block' : 'none';
         $('area-convidar').style.display = conversaAtual.ehAdmin ? 'block' : 'none';
         $('convidar-busca').value = '';
         $('convidar-resultado').innerHTML = '';
@@ -327,8 +408,11 @@ async function abrirConversa(idConversa, nomeExibido) {
         dados.mensagens.forEach(upsertMensagem);
 
         if (dados.mensagens.length > 0) {
+            primeiroIdMensagem = dados.mensagens[0].id_mensagem;
             ultimoIdMensagem = dados.mensagens[dados.mensagens.length - 1].id_mensagem;
         }
+
+        $('carregar-mais').style.display = dados.mensagens.length >= 30 ? 'block' : 'none';
 
         container.scrollTop = container.scrollHeight;
 
@@ -383,6 +467,50 @@ function upsertMensagem(msg) {
     else container.appendChild(novo);
 }
 
+$('btn-carregar-mais').addEventListener('click', carregarMensagensAntigas);
+
+async function carregarMensagensAntigas() {
+    if (! conversaAtual || primeiroIdMensagem === null || semMaisAntigas) return;
+
+    const botao = $('btn-carregar-mais');
+    const textoOriginal = botao.textContent;
+    botao.textContent = 'Carregando...';
+    botao.disabled = true;
+
+    try {
+        const antigas = await api(`/chat/${conversaAtual.id}/antigas/${primeiroIdMensagem}`);
+
+        if (antigas.length === 0) {
+            semMaisAntigas = true;
+            $('carregar-mais').style.display = 'none';
+            return;
+        }
+
+        const container = $('mensagens');
+        const alturaAntes = container.scrollHeight;
+
+        // insere no topo, mantendo a ordem cronológica
+        antigas.slice().reverse().forEach(msg => {
+            container.insertBefore(criarElementoMensagem(msg), container.firstChild);
+        });
+
+        primeiroIdMensagem = antigas[0].id_mensagem;
+
+        // mantém a posição de leitura (não deixa "pular" a tela quando insere em cima)
+        container.scrollTop = container.scrollHeight - alturaAntes;
+
+        if (antigas.length < 30) {
+            semMaisAntigas = true;
+            $('carregar-mais').style.display = 'none';
+        }
+    } catch (erro) {
+        alert(erro.message);
+    } finally {
+        botao.textContent = textoOriginal;
+        botao.disabled = false;
+    }
+}
+
 async function editarMensagem(msg) {
     const novoTexto = prompt('Editar mensagem:', msg.corpo);
 
@@ -413,6 +541,7 @@ $('form-envio').addEventListener('submit', async (e) => {
     if (! corpo || ! conversaAtual) return;
 
     input.value = '';
+    input.style.height = 'auto';
 
     try {
         await post(`/chat/${conversaAtual.id}/enviar`, { corpo });
@@ -421,6 +550,20 @@ $('form-envio').addEventListener('submit', async (e) => {
         input.value = corpo; // devolve o texto pro campo pra não perder
         alert(erro.message);
     }
+});
+
+// Enter envia; Shift+Enter quebra linha
+$('input-mensagem').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && ! e.shiftKey) {
+        e.preventDefault();
+        $('form-envio').requestSubmit();
+    }
+});
+
+// cresce junto com o texto, até uma altura máxima (o CSS trava o max-height)
+$('input-mensagem').addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = this.scrollHeight + 'px';
 });
 
 // ---------- polling ----------
@@ -541,8 +684,35 @@ async function carregarMembros() {
         membros.forEach(m => {
             const div = document.createElement('div');
             const pendente = m.status === 'pendente';
-            div.className = pendente ? 'pendente' : '';
-            div.textContent = m.nome + (m.eh_admin ? ' ⭐ admin' : '') + (pendente ? ' (convite pendente)' : '');
+            div.className = 'linha-membro' + (pendente ? ' pendente' : '');
+
+            const podeGerenciar = conversaAtual.ehAdmin && ! pendente && m.id_usuario != MEU_ID && ! m.eh_admin;
+
+            div.innerHTML = `
+                <span>${escapeHtml(m.nome)}${m.eh_admin ? ' ⭐ admin' : ''}${pendente ? ' (convite pendente)' : ''}</span>
+                ${podeGerenciar ? `<span class="acoes-membro">
+                    <button type="button" data-acao="promover">Tornar admin</button>
+                    <button type="button" data-acao="remover">Remover</button>
+                </span>` : ''}
+            `;
+
+            if (podeGerenciar) {
+                div.querySelector('[data-acao=promover]').addEventListener('click', async () => {
+                    try {
+                        await post(`/chat/${conversaAtual.id}/membros/${m.id_usuario}/promover`);
+                        carregarMembros();
+                    } catch (erro) { alert(erro.message); }
+                });
+
+                div.querySelector('[data-acao=remover]').addEventListener('click', async () => {
+                    if (! confirm(`Remover ${m.nome} do grupo?`)) return;
+                    try {
+                        await post(`/chat/${conversaAtual.id}/membros/${m.id_usuario}/remover`);
+                        carregarMembros();
+                    } catch (erro) { alert(erro.message); }
+                });
+            }
+
             container.appendChild(div);
         });
     } catch (erro) { alert(erro.message); }
@@ -551,6 +721,32 @@ async function carregarMembros() {
 $('btn-membros').addEventListener('click', () => {
     alternarPainel('painel-grupo');
     if ($('painel-grupo').style.display === 'block') carregarMembros();
+});
+
+$('btn-sair-grupo').addEventListener('click', async () => {
+    if (! conversaAtual) return;
+    if (! confirm('Tem certeza que quer sair deste grupo?')) return;
+
+    try {
+        await post(`/chat/${conversaAtual.id}/sair`);
+        fecharConversaAtual();
+        carregarConversas();
+    } catch (erro) { alert(erro.message); }
+});
+
+$('btn-renomear-grupo').addEventListener('click', async () => {
+    if (! conversaAtual) return;
+
+    const novoNome = prompt('Novo nome do grupo:', conversaAtual.titulo.replace('👥 ', ''));
+    if (! novoNome || ! novoNome.trim()) return;
+
+    try {
+        await post(`/chat/${conversaAtual.id}/renomear`, { titulo: novoNome.trim() });
+
+        conversaAtual.titulo = '👥 ' + novoNome.trim();
+        $('titulo-chat').textContent = conversaAtual.titulo;
+        carregarConversas();
+    } catch (erro) { alert(erro.message); }
 });
 
 ligarBusca($('convidar-busca'), $('btn-convidar-buscar'), $('convidar-resultado'), async (u) => {

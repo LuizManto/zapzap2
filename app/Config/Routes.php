@@ -25,6 +25,21 @@ $routes->post('/chat/(:num)/enviar', 'ChatController::enviar/$1', ['filter' => '
 $routes->post('/chat/(:num)/convidar', 'ChatController::convidar/$1', ['filter' => 'auth']);
 $routes->get('/chat/(:num)', 'ChatController::abrir/$1', ['filter' => 'auth']);
 
+// perfil
+$routes->get('/perfil', 'PerfilController::tela', ['filter' => 'auth']);
+$routes->post('/perfil', 'PerfilController::atualizar', ['filter' => 'auth']);
+
+// conversas
+$routes->post('/chat/(:num)/ocultar', 'ChatController::ocultarConversa/$1', ['filter' => 'auth']);
+$routes->get('/chat/(:num)/antigas/(:num)', 'ChatController::antigas/$1/$2', ['filter' => 'auth']);
+
+// grupos
+$routes->post('/chat/(:num)/sair', 'ChatController::sairDoGrupo/$1', ['filter' => 'auth']);
+$routes->post('/chat/(:num)/renomear', 'ChatController::renomearGrupo/$1', ['filter' => 'auth']);
+$routes->post('/chat/(:num)/membros/(:num)/remover', 'ChatController::removerMembro/$1/$2', ['filter' => 'auth']);
+$routes->post('/chat/(:num)/membros/(:num)/promover', 'ChatController::promoverAdmin/$1/$2', ['filter' => 'auth']);
+
+
 /** @var RouteCollection $routes */
 $routes->get('/', static function () {
     return redirect()->to(session()->get('usuario_logado') ? '/chat' : '/login');

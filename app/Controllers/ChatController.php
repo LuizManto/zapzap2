@@ -69,7 +69,10 @@ class ChatController extends BaseController
         // "o que foi editado/apagado desde a última vez que eu olhei"
         $agora = date('Y-m-d H:i:s');
 
-        $mensagens = $this->mensagemModel->historico($idConversa);
+        // em grupo, quem entrou depois não vê o histórico de antes de entrar
+        $desde = $detalhes['tipo'] === 'grupo' ? $detalhes['entrou_em'] : null;
+
+        $mensagens = $this->mensagemModel->historico($idConversa, null, 30, $desde);
         $this->conversaModel->marcarComoLida($idConversa, $meuId);
 
         return $this->response->setJSON([
@@ -78,6 +81,27 @@ class ChatController extends BaseController
             'conversa'  => $detalhes,
             'agora'     => $agora,
         ]);
+    }
+
+    /**
+     * Carrega um lote mais antigo de mensagens (botão "carregar mais" no topo do chat).
+     * Rota: GET /chat/(:num)/antigas/(:num)   -- o segundo número é o id da mensagem mais antiga já carregada
+     */
+    public function antigas($idConversa, $antesDoId)
+    {
+        $idConversa = (int) $idConversa;
+        $meuId      = $this->meuId();
+
+        $detalhes = $this->conversaModel->detalhes($idConversa, $meuId);
+        if (! $detalhes) {
+            return $this->erro('Você não participa dessa conversa.', 403);
+        }
+
+        $desde = $detalhes['tipo'] === 'grupo' ? $detalhes['entrou_em'] : null;
+
+        $mensagens = $this->mensagemModel->historico($idConversa, (int) $antesDoId, 30, $desde);
+
+        return $this->response->setJSON($mensagens);
     }
 
     /**
@@ -359,5 +383,131 @@ class ChatController extends BaseController
         }
 
         return $this->response->setJSON($this->conversaModel->listarMembros($idConversa));
+    }
+
+    /**
+     * Some com a conversa só pra mim (individual ou grupo). Volta a aparecer se
+     * chegar mensagem nova.
+     * Rota: POST /chat/(:num)/ocultar
+     */
+    public function ocultarConversa($idConversa)
+    {
+        $idConversa = (int) $idConversa;
+        $meuId      = $this->meuId();
+
+        if (! $this->conversaModel->usuarioParticipaDaConversa($idConversa, $meuId)) {
+            return $this->erro('Você não participa dessa conversa.', 403);
+        }
+
+        $this->conversaModel->ocultarConversa($idConversa, $meuId);
+
+        return $this->response->setJSON(['ok' => true]);
+    }
+
+    /**
+     * Sai de um grupo. Se for o único admin, promove outra pessoa automaticamente;
+     * se for o último membro, o grupo é apagado.
+     * Rota: POST /chat/(:num)/sair
+     */
+    public function sairDoGrupo($idConversa)
+    {
+        $idConversa = (int) $idConversa;
+        $meuId      = $this->meuId();
+
+        $detalhes = $this->conversaModel->detalhes($idConversa, $meuId);
+        if (! $detalhes) {
+            return $this->erro('Você não participa dessa conversa.', 403);
+        }
+
+        if ($detalhes['tipo'] !== 'grupo') {
+            return $this->erro('Essa ação é só para grupos.', 422);
+        }
+
+        $this->conversaModel->sairDoGrupo($idConversa, $meuId);
+
+        return $this->response->setJSON(['ok' => true]);
+    }
+
+    /**
+     * Admin remove outro membro do grupo.
+     * Rota: POST /chat/(:num)/membros/(:num)/remover
+     */
+    public function removerMembro($idConversa, $idAlvo)
+    {
+        $idConversa = (int) $idConversa;
+        $meuId      = $this->meuId();
+
+        $detalhes = $this->conversaModel->detalhes($idConversa, $meuId);
+        if (! $detalhes || $detalhes['tipo'] !== 'grupo') {
+            return $this->erro('Você não participa desse grupo.', 403);
+        }
+
+        if (! $detalhes['eh_admin']) {
+            return $this->erro('Só administradores podem remover membros.', 403);
+        }
+
+        if (! $this->conversaModel->removerMembro($idConversa, $meuId, (int) $idAlvo)) {
+            return $this->erro('Não foi possível remover esse membro (ele pode já ser admin).', 422);
+        }
+
+        return $this->response->setJSON(['ok' => true]);
+    }
+
+    /**
+     * Admin promove outro membro a admin.
+     * Rota: POST /chat/(:num)/membros/(:num)/promover
+     */
+    public function promoverAdmin($idConversa, $idAlvo)
+    {
+        $idConversa = (int) $idConversa;
+        $meuId      = $this->meuId();
+
+        $detalhes = $this->conversaModel->detalhes($idConversa, $meuId);
+        if (! $detalhes || $detalhes['tipo'] !== 'grupo') {
+            return $this->erro('Você não participa desse grupo.', 403);
+        }
+
+        if (! $detalhes['eh_admin']) {
+            return $this->erro('Só administradores podem promover outros membros.', 403);
+        }
+
+        if (! $this->conversaModel->promoverAdmin($idConversa, (int) $idAlvo)) {
+            return $this->erro('Não foi possível promover esse membro.', 422);
+        }
+
+        return $this->response->setJSON(['ok' => true]);
+    }
+
+    /**
+     * Admin renomeia o grupo.
+     * Rota: POST /chat/(:num)/renomear   (campo: titulo)
+     */
+    public function renomearGrupo($idConversa)
+    {
+        $idConversa = (int) $idConversa;
+        $meuId      = $this->meuId();
+
+        $detalhes = $this->conversaModel->detalhes($idConversa, $meuId);
+        if (! $detalhes || $detalhes['tipo'] !== 'grupo') {
+            return $this->erro('Você não participa desse grupo.', 403);
+        }
+
+        if (! $detalhes['eh_admin']) {
+            return $this->erro('Só administradores podem renomear o grupo.', 403);
+        }
+
+        $novoTitulo = trim((string) $this->request->getPost('titulo'));
+
+        if ($novoTitulo === '') {
+            return $this->erro('O nome do grupo não pode ficar vazio.', 422);
+        }
+
+        if (mb_strlen($novoTitulo) > 150) {
+            return $this->erro('Nome do grupo muito longo (máximo 150 caracteres).', 422);
+        }
+
+        $this->conversaModel->renomearGrupo($idConversa, $novoTitulo);
+
+        return $this->response->setJSON(['ok' => true, 'titulo' => $novoTitulo]);
     }
 }

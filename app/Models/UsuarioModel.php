@@ -54,6 +54,27 @@ class UsuarioModel extends Model
     }
 
     /**
+     * Atualiza nome/recado/avatar. A senha só é trocada se $novaSenha vier preenchida.
+     */
+    public function atualizarPerfil(int $idUsuario, string $nome, string $status, ?string $avatar, ?string $novaSenha): bool
+    {
+        $dados = [
+            'nome'   => $nome,
+            'status' => $status,
+        ];
+
+        if ($avatar !== null) {
+            $dados['avatar'] = $avatar;
+        }
+
+        if ($novaSenha !== null && $novaSenha !== '') {
+            $dados['senha'] = password_hash($novaSenha, PASSWORD_DEFAULT);
+        }
+
+        return (bool) $this->update($idUsuario, $dados);
+    }
+
+    /**
      * Busca usuários por nome ou e-mail, pra abrir uma nova conversa.
      * Exclui o próprio usuário logado da busca.
      */

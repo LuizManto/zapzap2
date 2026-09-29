@@ -51,8 +51,11 @@ class MensagemModel extends Model
 
     /**
      * Histórico de mensagens de uma conversa, mais antigas primeiro.
+     * $antesDoId pagina pra trás ("carregar mensagens mais antigas").
+     * $desde (opcional) esconde mensagens de antes dessa data — usado pra quem
+     * entrou num grupo não ver o histórico anterior à entrada dele.
      */
-    public function historico(int $idConversa, ?int $antesDoId = null, int $limite = 30): array
+    public function historico(int $idConversa, ?int $antesDoId = null, int $limite = 30, ?string $desde = null): array
     {
         $builder = $this->db->table('mensagens m')
             ->select(self::COLUNAS)
@@ -61,6 +64,10 @@ class MensagemModel extends Model
 
         if ($antesDoId !== null) {
             $builder->where('m.id_mensagem <', $antesDoId);
+        }
+
+        if ($desde !== null) {
+            $builder->where('m.criado_em >=', $desde);
         }
 
         $mensagens = $builder->orderBy('m.id_mensagem', 'DESC')->limit($limite)->get()->getResultArray();

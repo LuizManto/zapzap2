@@ -62,6 +62,10 @@ class ConversaModel extends Model
                    ON ultima.id_mensagem = (SELECT MAX(id_mensagem) FROM mensagens WHERE id_conversa = c.id_conversa)
             WHERE cu.id_usuario = ?
               AND cu.status = 'aceito'
+              AND (
+                    cu.oculta_em IS NULL
+                 OR (ultima.criado_em IS NOT NULL AND ultima.criado_em > cu.oculta_em)
+              )
             ORDER BY COALESCE(ultima.criado_em, c.criado_em) DESC
         ";
 
@@ -225,7 +229,7 @@ class ConversaModel extends Model
     public function detalhes(int $idConversa, int $idUsuario): ?array
     {
         $sql = "
-            SELECT c.id_conversa, c.tipo, c.titulo, cu.eh_admin
+            SELECT c.id_conversa, c.tipo, c.titulo, cu.eh_admin, cu.entrou_em
             FROM conversas c
             INNER JOIN conversas_usuarios cu ON cu.id_conversa = c.id_conversa
             WHERE c.id_conversa = ? AND cu.id_usuario = ? AND cu.status = 'aceito'
@@ -275,6 +279,124 @@ class ConversaModel extends Model
             ->where('id_usuario', $idUsuario)
             ->where('status', 'aceito')
             ->countAllResults();
+    }
+
+    /**
+     * "Apaga" a conversa só para esse usuário (esconde da lista dele).
+     * Volta a aparecer sozinha assim que chegar mensagem nova.
+     */
+    public function ocultarConversa(int $idConversa, int $idUsuario): void
+    {
+        $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idUsuario)
+            ->update(['oculta_em' => date('Y-m-d H:i:s')]);
+    }
+
+    /**
+     * Usuário sai do grupo. Se ele era o único admin e ainda sobrou gente,
+     * promove automaticamente quem entrou há mais tempo. Se ele era o último
+     * membro, apaga o grupo (e as mensagens, via ON DELETE CASCADE do banco).
+     */
+    public function sairDoGrupo(int $idConversa, int $idUsuario): bool
+    {
+        $eraAdmin = (bool) $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idUsuario)
+            ->where('status', 'aceito')
+            ->where('eh_admin', true)
+            ->countAllResults();
+
+        $removido = $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idUsuario)
+            ->delete();
+
+        if (! $removido || $this->db->affectedRows() === 0) {
+            return false;
+        }
+
+        $restantes = $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('status', 'aceito')
+            ->countAllResults();
+
+        if ($restantes === 0) {
+            $this->delete($idConversa); // apaga o grupo; mensagens somem junto (FK ON DELETE CASCADE)
+            return true;
+        }
+
+        if ($eraAdmin) {
+            $aindaTemAdmin = (bool) $this->db->table('conversas_usuarios')
+                ->where('id_conversa', $idConversa)
+                ->where('status', 'aceito')
+                ->where('eh_admin', true)
+                ->countAllResults();
+
+            if (! $aindaTemAdmin) {
+                $proximo = $this->db->table('conversas_usuarios')
+                    ->where('id_conversa', $idConversa)
+                    ->where('status', 'aceito')
+                    ->orderBy('entrou_em', 'ASC')
+                    ->get(1)
+                    ->getRowArray();
+
+                if ($proximo) {
+                    $this->db->table('conversas_usuarios')
+                        ->where('id_conversa', $idConversa)
+                        ->where('id_usuario', $proximo['id_usuario'])
+                        ->update(['eh_admin' => true]);
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Admin remove outro membro do grupo. Não permite remover a si mesmo por aqui
+     * (pra isso existe sairDoGrupo) nem remover quem também é admin.
+     */
+    public function removerMembro(int $idConversa, int $idAdmin, int $idAlvo): bool
+    {
+        if ($idAdmin === $idAlvo) {
+            return false;
+        }
+
+        $alvoEhAdmin = (bool) $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idAlvo)
+            ->where('eh_admin', true)
+            ->countAllResults();
+
+        if ($alvoEhAdmin) {
+            return false;
+        }
+
+        $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idAlvo)
+            ->delete();
+
+        return $this->db->affectedRows() > 0;
+    }
+
+    public function promoverAdmin(int $idConversa, int $idAlvo): bool
+    {
+        $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idAlvo)
+            ->where('status', 'aceito')
+            ->update(['eh_admin' => true]);
+
+        return $this->db->affectedRows() > 0;
+    }
+
+    public function renomearGrupo(int $idConversa, string $novoTitulo): bool
+    {
+        $this->update($idConversa, ['titulo' => $novoTitulo]);
+
+        return true;
     }
 
     /**
