@@ -37,8 +37,9 @@ class ChatController extends BaseController
     public function index()
     {
         return view('chat/index', [
-            'meuId'   => $this->meuId(),
-            'meuNome' => session()->get('nome'),
+            'meuId'     => $this->meuId(),
+            'meuNome'   => session()->get('nome'),
+            'meuAvatar' => session()->get('avatar'),
         ]);
     }
 
@@ -104,8 +105,13 @@ class ChatController extends BaseController
         return $this->response->setJSON($mensagens);
     }
 
+    private const EXTENSOES_IMAGEM = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    private const EXTENSOES_ARQUIVO = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'zip', 'rar'];
+    private const TAMANHO_MAXIMO_ANEXO = 10 * 1024 * 1024; // 10MB
+
     /**
-     * Envia uma mensagem.
+     * Envia uma mensagem. Pode ter texto, um anexo (imagem ou arquivo), ou os dois.
+     * Pode também ser uma resposta a outra mensagem (campo respondendo_a).
      * Rota: POST /chat/(:num)/enviar
      */
     public function enviar($idConversa)
@@ -119,17 +125,82 @@ class ChatController extends BaseController
 
         $corpo = trim((string) $this->request->getPost('corpo'));
 
-        if ($corpo === '') {
-            return $this->erro('Mensagem vazia.', 422);
-        }
-
         if (mb_strlen($corpo) > 5000) {
             return $this->erro('Mensagem muito longa (máximo 5000 caracteres).', 422);
         }
 
-        $idMensagem = $this->mensagemModel->enviar($idConversa, $meuId, $corpo);
+        // resposta a outra mensagem (opcional)
+        $respondendoA = $this->request->getPost('respondendo_a');
+        $respondendoA = ($respondendoA !== null && $respondendoA !== '') ? (int) $respondendoA : null;
+
+        if ($respondendoA !== null && ! $this->mensagemModel->podeResponder($idConversa, $respondendoA)) {
+            return $this->erro('Não é possível responder a essa mensagem.', 422);
+        }
+
+        // anexo (opcional)
+        $tipo       = 'texto';
+        $anexo      = null;
+        $anexoNome  = null;
+
+        $arquivo = $this->request->getFile('arquivo');
+
+        if ($arquivo && $arquivo->isValid() && $arquivo->getError() !== UPLOAD_ERR_NO_FILE) {
+            if (! $arquivo->isValid()) {
+                return $this->erro('Falha ao enviar o arquivo.', 422);
+            }
+
+            if ($arquivo->getSize() > self::TAMANHO_MAXIMO_ANEXO) {
+                return $this->erro('Arquivo muito grande (máximo 10MB).', 422);
+            }
+
+            $extensao = strtolower($arquivo->getClientExtension());
+
+            if (in_array($extensao, self::EXTENSOES_IMAGEM, true)) {
+                $tipo = 'imagem';
+            } elseif (in_array($extensao, self::EXTENSOES_ARQUIVO, true)) {
+                $tipo = 'arquivo';
+            } else {
+                return $this->erro('Tipo de arquivo não permitido.', 422);
+            }
+
+            $anexoNome = $arquivo->getClientName(); // nome original, só pra mostrar na tela
+            $anexo     = $arquivo->getRandomName();  // nome salvo em disco (evita colisão/sobrescrita)
+            $arquivo->move(FCPATH . 'uploads/mensagens', $anexo);
+        }
+
+        if ($corpo === '' && $anexo === null) {
+            return $this->erro('Mensagem vazia.', 422);
+        }
+
+        $idMensagem = $this->mensagemModel->enviar(
+            $idConversa,
+            $meuId,
+            $corpo !== '' ? $corpo : null,
+            $tipo,
+            $anexo,
+            $anexoNome,
+            $respondendoA
+        );
 
         return $this->response->setJSON(['id_mensagem' => $idMensagem]);
+    }
+
+    /**
+     * Avisa que estou digitando nessa conversa agora (chamado pelo JS a cada poucos segundos).
+     * Rota: POST /chat/(:num)/digitando
+     */
+    public function digitando($idConversa)
+    {
+        $idConversa = (int) $idConversa;
+        $meuId      = $this->meuId();
+
+        if (! $this->conversaModel->usuarioParticipaDaConversa($idConversa, $meuId)) {
+            return $this->erro('Você não participa dessa conversa.', 403);
+        }
+
+        $this->conversaModel->registrarDigitando($idConversa, $meuId);
+
+        return $this->response->setJSON(['ok' => true]);
     }
 
     /**
@@ -160,9 +231,10 @@ class ChatController extends BaseController
         }
 
         return $this->response->setJSON([
-            'novas'     => $novas,
-            'alteradas' => $alteradas,
-            'agora'     => $agora,
+            'novas'      => $novas,
+            'alteradas'  => $alteradas,
+            'agora'      => $agora,
+            'digitando'  => $this->conversaModel->quemEstaDigitando($idConversa, $meuId),
         ]);
     }
 
@@ -251,6 +323,21 @@ class ChatController extends BaseController
         }
 
         return $this->response->setJSON($this->usuarioModel->buscarUsuarios($termo, $this->meuId()));
+    }
+
+    /**
+     * Dados públicos de um usuário (nome, avatar, recado), pra abrir a tela de "ver perfil".
+     * Rota: GET /chat/usuario/(:num)/perfil
+     */
+    public function perfilUsuario($idUsuario)
+    {
+        $perfil = $this->usuarioModel->buscarPerfilPublico((int) $idUsuario);
+
+        if (! $perfil) {
+            return $this->erro('Usuário não encontrado.', 404);
+        }
+
+        return $this->response->setJSON($perfil);
     }
 
     /**

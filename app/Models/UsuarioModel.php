@@ -75,6 +75,14 @@ class UsuarioModel extends Model
     }
 
     /**
+     * Dados públicos de um usuário (sem e-mail nem senha), pra tela de "ver perfil".
+     */
+    public function buscarPerfilPublico(int $idUsuario): ?array
+    {
+        return $this->select('id_usuario, nome, avatar, status')->find($idUsuario);
+    }
+
+    /**
      * Busca usuários por nome ou e-mail, pra abrir uma nova conversa.
      * Exclui o próprio usuário logado da busca.
      */

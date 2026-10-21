@@ -35,8 +35,18 @@
     #busca-conversas { padding: 8px 10px; border-bottom: 1px solid #eee; }
     #busca-conversas input { width: 100%; padding: 7px; border: 1px solid #ccc; border-radius: 4px; }
 
+    img.avatar-lista { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    img.avatar-mini { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    img.avatar-mini-chat { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    img.avatar-grande { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; }
+
+    #rodape-perfil { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f0f2f5; border-top: 1px solid #ddd; }
+    #rodape-perfil a#meu-nome-perfil { flex: 1; font-weight: bold; font-size: 14px; color: #111; text-decoration: none; }
+    #rodape-perfil a#meu-nome-perfil:hover { text-decoration: underline; }
+    #rodape-perfil a#rodape-sair { font-size: 12px; color: #667781; }
+
     #lista-conversas { flex: 1; overflow-y: auto; }
-    .item-conversa { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+    .item-conversa { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #f0f0f0; gap: 10px; }
     .item-conversa:hover, .item-conversa.ativa { background: #f0f2f5; }
     .item-conversa .nome { font-weight: bold; font-size: 14px; }
     .item-conversa .ultima { font-size: 13px; color: #667781; max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -76,12 +86,35 @@
     .balao .acoes button { border: none; background: none; padding: 0; font-size: 11px; color: #667781; text-decoration: underline; }
     .balao .acoes button:hover { color: #000; }
 
+    /* citação de resposta dentro do balão */
+    .balao .citacao {
+        background: rgba(0,0,0,.05); border-left: 3px solid #06cf9c; border-radius: 4px;
+        padding: 4px 8px; margin-bottom: 4px; font-size: 12px; color: #555; cursor: pointer;
+    }
+    .balao .citacao b { color: #06cf9c; }
+    .balao .citacao.apagada { font-style: italic; color: #999; }
+
+    /* anexos (imagem / arquivo) */
+    .anexo-imagem { max-width: 240px; max-height: 240px; border-radius: 6px; display: block; cursor: pointer; }
+    .anexo-arquivo { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,.05); padding: 8px 10px; border-radius: 6px; text-decoration: none; color: #111; font-size: 13px; }
+    .anexo-arquivo:hover { background: rgba(0,0,0,.1); }
+
+    /* pré-visualização de resposta / anexo acima do campo de digitar */
+    #pre-envio { display: none; padding: 8px 12px; background: #e9edf0; border-top: 1px solid #ddd; font-size: 13px; }
+    #pre-envio .linha { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    #pre-envio .fechar { border: none; background: none; color: #667781; font-size: 16px; padding: 0 4px; }
+    #pre-envio .fechar:hover { color: #000; }
+    #pre-arquivo-nome { display: flex; align-items: center; gap: 6px; }
+
+    #indicador-digitando { padding: 0 16px 4px; font-size: 12px; color: #667781; font-style: italic; min-height: 16px; }
+
     #form-envio { display: none; padding: 12px; background: #f0f2f5; gap: 8px; align-items: flex-end; }
     #input-mensagem {
         flex: 1; padding: 10px 14px; border-radius: 18px; border: 1px solid #ccc;
         resize: none; max-height: 120px; font-family: inherit; font-size: 14px; line-height: 1.3;
     }
-    #form-envio button { border: none; background: #25d366; color: #fff; padding: 10px 18px; border-radius: 20px; }
+    #form-envio button[type=submit] { border: none; background: #25d366; color: #fff; padding: 10px 18px; border-radius: 20px; }
+    #btn-anexar { background: #f5f5f5; border: 1px solid #ccc; border-radius: 50%; width: 38px; height: 38px; font-size: 16px; line-height: 1; }
 </style>
 </head>
 <body>
@@ -94,8 +127,6 @@
             <div class="botoes">
                 <button class="btn-verde" id="btn-nova-conversa">+ Conversa</button>
                 <button class="btn-verde" id="btn-novo-grupo">+ Grupo</button>
-                <a id="link-perfil" href="/perfil">Perfil</a>
-                <a id="link-sair" href="/logout">Sair</a>
             </div>
         </div>
 
@@ -126,13 +157,22 @@
 
         <div id="convites"></div>
         <div id="lista-conversas"></div>
+
+        <div id="rodape-perfil">
+            <img id="meu-avatar" class="avatar-mini" alt="">
+            <a id="meu-nome-perfil" href="/perfil"><?= esc($meuNome) ?></a>
+            <a id="rodape-sair" href="/logout">Sair</a>
+        </div>
     </div>
 
     <div id="coluna-chat">
         <div id="sem-conversa">Selecione uma conversa para começar</div>
 
         <div id="cabecalho-chat">
-            <span id="titulo-chat"></span>
+            <div id="cabecalho-chat-info" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <img id="avatar-chat" class="avatar-mini" alt="">
+                <span id="titulo-chat"></span>
+            </div>
             <button type="button" class="btn-cinza" id="btn-membros" style="display:none;">Membros</button>
         </div>
 
@@ -151,10 +191,31 @@
             </div>
         </div>
 
+        <div class="painel" id="painel-perfil-usuario" style="text-align:center;">
+            <img id="perfil-avatar-grande" class="avatar-grande" alt="">
+            <h3 id="perfil-nome-exibido" style="margin:8px 0 2px;"></h3>
+            <p id="perfil-recado-exibido" style="color:#667781; margin:0 0 10px;"></p>
+            <button type="button" class="btn-cinza" id="btn-fechar-perfil-usuario">Fechar</button>
+        </div>
+
         <div id="carregar-mais"><button type="button" id="btn-carregar-mais">Carregar mensagens mais antigas</button></div>
         <div id="mensagens"></div>
+        <div id="indicador-digitando"></div>
+
+        <div id="pre-envio">
+            <div class="linha" id="pre-envio-resposta" style="display:none;">
+                <span>Respondendo a <b id="pre-resposta-nome"></b>: <span id="pre-resposta-texto"></span></span>
+                <button type="button" class="fechar" id="btn-cancelar-resposta">✕</button>
+            </div>
+            <div class="linha" id="pre-envio-arquivo" style="display:none;">
+                <span id="pre-arquivo-nome"></span>
+                <button type="button" class="fechar" id="btn-cancelar-arquivo">✕</button>
+            </div>
+        </div>
 
         <form id="form-envio">
+            <input type="file" id="input-arquivo" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" style="display:none;">
+            <button type="button" class="btn-cinza" id="btn-anexar" title="Anexar imagem ou arquivo">📎</button>
             <textarea id="input-mensagem" rows="1" placeholder="Digite uma mensagem (Enter envia, Shift+Enter quebra linha)" autocomplete="off"></textarea>
             <button type="submit">Enviar</button>
         </form>
@@ -166,6 +227,24 @@
 const MEU_ID = <?= (int) $meuId ?>;
 const $ = (id) => document.getElementById(id);
 
+// monta a URL do avatar; se a pessoa não tem foto, gera um círculo colorido com a inicial do nome
+function avatarSrc(nome, arquivo) {
+    if (arquivo) return `/uploads/avatars/${arquivo}`;
+
+    const letra = (nome || '?').trim().charAt(0).toUpperCase() || '?';
+    const cores = ['#f08a5d', '#b83b5e', '#6a2c70', '#3f72af', '#1b998b', '#c9972c', '#e84545', '#2d4059'];
+    let soma = 0;
+    for (const c of (nome || '')) soma += c.charCodeAt(0);
+    const cor = cores[soma % cores.length];
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+        <rect width="40" height="40" rx="20" fill="${cor}"/>
+        <text x="50%" y="50%" dy=".35em" text-anchor="middle" fill="#fff" font-family="Arial" font-size="18">${letra}</text>
+    </svg>`;
+
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
 let conversaAtual = null;      // { id, tipo, ehAdmin, titulo }
 let ultimoIdMensagem = 0;
 let primeiroIdMensagem = null; // id da mensagem mais antiga já carregada (pro "carregar mais")
@@ -174,6 +253,10 @@ let desdeServidor = '';        // hora do servidor na última sincronização (p
 let intervaloPolling = null;
 let conversasCache = [];       // último resultado de /chat/conversas, pra filtrar sem bater no servidor de novo
 const grupoEscolhidos = new Map(); // id_usuario -> nome
+
+let respondendoAtual = null;   // { id_mensagem, remetente_nome, corpo } ou null
+let arquivoSelecionado = null; // File ou null
+let ultimoEnvioDigitando = 0;  // timestamp (ms) do último aviso "estou digitando" mandado ao servidor
 
 // ---------- util ----------
 
@@ -278,7 +361,8 @@ function desenharConversas() {
             const naoLidas = parseInt(c.nao_lidas || 0);
 
             div.innerHTML = `
-                <div>
+                <img class="avatar-lista" src="${avatarSrc(c.nome_exibido, c.foto_exibida)}" alt="">
+                <div style="flex:1; min-width:0;">
                     <div class="nome">${escapeHtml(nome)}</div>
                     <div class="ultima">${escapeHtml(ultima)}</div>
                 </div>
@@ -326,6 +410,8 @@ function fecharConversaAtual() {
     $('form-envio').style.display = 'none';
     $('painel-grupo').style.display = 'none';
     $('carregar-mais').style.display = 'none';
+    $('indicador-digitando').textContent = '';
+    limparPreEnvio();
 }
 
 // ---------- convites de grupo (esquerda) ----------
@@ -382,21 +468,27 @@ async function abrirConversa(idConversa, nomeExibido) {
             tipo: dados.conversa.tipo,
             ehAdmin: dados.conversa.eh_admin,
             titulo: nomeExibido,
+            outroId: dados.conversa.outro_usuario_id ?? null,
+            foto: dados.conversa.foto_exibida ?? null,
         };
         desdeServidor = dados.agora;
         ultimoIdMensagem = 0;
         primeiroIdMensagem = null;
         semMaisAntigas = false;
+        limparPreEnvio();
+        $('indicador-digitando').textContent = '';
 
         $('sem-conversa').style.display = 'none';
         $('cabecalho-chat').style.display = 'flex';
         $('mensagens').style.display = 'flex';
         $('form-envio').style.display = 'flex';
         $('titulo-chat').textContent = nomeExibido;
+        $('avatar-chat').src = avatarSrc(nomeExibido, conversaAtual.foto);
         $('input-mensagem').style.height = 'auto';
 
         // painel de membros/admin só existe em grupo
         $('painel-grupo').style.display = 'none';
+        $('painel-perfil-usuario').style.display = 'none';
         $('btn-membros').style.display = conversaAtual.tipo === 'grupo' ? 'inline-block' : 'none';
         $('btn-renomear-grupo').style.display = conversaAtual.ehAdmin ? 'inline-block' : 'none';
         $('area-convidar').style.display = conversaAtual.ehAdmin ? 'block' : 'none';
@@ -425,6 +517,36 @@ async function abrirConversa(idConversa, nomeExibido) {
 
 // ---------- mensagens ----------
 
+// monta o HTML do conteúdo (texto e/ou anexo) de uma mensagem não apagada
+function montarCorpoMensagem(msg) {
+    let html = '';
+
+    if (msg.anexo) {
+        if (msg.tipo === 'imagem') {
+            html += `<img class="anexo-imagem" src="/uploads/mensagens/${encodeURIComponent(msg.anexo)}" alt="Imagem enviada" data-acao="abrir-imagem">`;
+        } else {
+            html += `<a class="anexo-arquivo" href="/uploads/mensagens/${encodeURIComponent(msg.anexo)}" download="${escapeHtml(msg.anexo_nome || '')}" target="_blank">
+                📄 ${escapeHtml(msg.anexo_nome || 'Arquivo')}
+            </a>`;
+        }
+    }
+
+    if (msg.corpo) {
+        html += `<div class="corpo">${escapeHtml(msg.corpo)}</div>`;
+    }
+
+    return html;
+}
+
+// resumo curto de uma mensagem, pra usar na citação ("respondendo a...") e na pré-visualização
+function resumoMensagem(msg) {
+    if (msg.apagada) return '🚫 Mensagem apagada';
+    if (msg.tipo === 'imagem') return '📷 Imagem';
+    if (msg.tipo === 'arquivo') return '📄 ' + (msg.anexo_nome || 'Arquivo');
+    const texto = msg.corpo || '';
+    return texto.length > 80 ? texto.slice(0, 80) + '…' : texto;
+}
+
 function criarElementoMensagem(msg) {
     const ehMinha = msg.id_remetente == MEU_ID;
     const ehGrupo = conversaAtual && conversaAtual.tipo === 'grupo';
@@ -434,24 +556,57 @@ function criarElementoMensagem(msg) {
     div.dataset.id = msg.id_mensagem;
 
     const hora = new Date(msg.criado_em.replace(' ', 'T')).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const corpo = msg.apagada ? '🚫 Mensagem apagada' : escapeHtml(msg.corpo);
-    const podeAgir = ehMinha && ! msg.apagada && msg.tipo === 'texto';
+    const corpoHtml = msg.apagada ? '<div class="corpo">🚫 Mensagem apagada</div>' : montarCorpoMensagem(msg);
+
+    const podeApagar  = ehMinha && ! msg.apagada;
+    const podeEditar  = ehMinha && ! msg.apagada && msg.tipo === 'texto';
+    const podeResponder = ! msg.apagada;
+
+    const citacaoHtml = msg.resposta_a ? `
+        <div class="citacao${msg.resposta_a.apagada ? ' apagada' : ''}" data-acao="ver-citacao">
+            <b>${escapeHtml(msg.resposta_a.remetente_nome || '')}</b><br>
+            ${escapeHtml(resumoMensagem(msg.resposta_a))}
+        </div>
+    ` : '';
 
     div.innerHTML = `
-        ${(! ehMinha && ehGrupo) ? `<div class="remetente">${escapeHtml(msg.remetente_nome)}</div>` : ''}
-        <div class="corpo">${corpo}</div>
+        ${(! ehMinha && ehGrupo) ? `<div class="remetente-linha" style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+            <img class="avatar-mini-chat" src="${avatarSrc(msg.remetente_nome, msg.remetente_avatar)}" alt="">
+            <span class="remetente" style="cursor:pointer;" data-acao="ver-perfil">${escapeHtml(msg.remetente_nome)}</span>
+        </div>` : ''}
+        ${citacaoHtml}
+        ${corpoHtml}
         <div class="rodape">
-            ${podeAgir ? `<span class="acoes">
-                <button type="button" data-acao="editar">Editar</button>
-                <button type="button" data-acao="apagar">Apagar</button>
-            </span>` : ''}
+            <span class="acoes">
+                ${podeResponder ? `<button type="button" data-acao="responder">Responder</button>` : ''}
+                ${podeEditar ? `<button type="button" data-acao="editar">Editar</button>` : ''}
+                ${podeApagar ? `<button type="button" data-acao="apagar">Apagar</button>` : ''}
+            </span>
             <span class="hora">${msg.editada && ! msg.apagada ? '(editada) ' : ''}${hora}</span>
         </div>
     `;
 
-    if (podeAgir) {
-        div.querySelector('[data-acao=editar]').addEventListener('click', () => editarMensagem(msg));
-        div.querySelector('[data-acao=apagar]').addEventListener('click', () => apagarMensagem(msg));
+    const btnResponder = div.querySelector('[data-acao=responder]');
+    if (btnResponder) btnResponder.addEventListener('click', () => iniciarResposta(msg));
+
+    const btnEditar = div.querySelector('[data-acao=editar]');
+    if (btnEditar) btnEditar.addEventListener('click', () => editarMensagem(msg));
+
+    const btnApagar = div.querySelector('[data-acao=apagar]');
+    if (btnApagar) btnApagar.addEventListener('click', () => apagarMensagem(msg));
+
+    const imagemAnexo = div.querySelector('[data-acao=abrir-imagem]');
+    if (imagemAnexo) imagemAnexo.addEventListener('click', () => window.open(imagemAnexo.src, '_blank'));
+
+    const nomeClicavel = div.querySelector('[data-acao=ver-perfil]');
+    if (nomeClicavel) nomeClicavel.addEventListener('click', () => abrirPerfilUsuario(msg.id_remetente));
+
+    const citacao = div.querySelector('[data-acao=ver-citacao]');
+    if (citacao && msg.resposta_a) {
+        citacao.addEventListener('click', () => {
+            const alvo = $('mensagens').querySelector(`[data-id="${msg.resposta_a.id_mensagem}"]`);
+            if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
     }
 
     return div;
@@ -533,18 +688,82 @@ async function apagarMensagem(msg) {
     } catch (erro) { alert(erro.message); }
 }
 
+// ---------- responder / anexar (pré-visualização acima do campo de digitar) ----------
+
+function atualizarVisibilidadePreEnvio() {
+    const temAlgo = respondendoAtual !== null || arquivoSelecionado !== null;
+    $('pre-envio').style.display = temAlgo ? 'block' : 'none';
+}
+
+function iniciarResposta(msg) {
+    respondendoAtual = { id_mensagem: msg.id_mensagem, remetente_nome: msg.remetente_nome, corpo: resumoMensagem(msg) };
+
+    $('pre-resposta-nome').textContent = msg.id_remetente == MEU_ID ? 'você' : msg.remetente_nome;
+    $('pre-resposta-texto').textContent = respondendoAtual.corpo;
+    $('pre-envio-resposta').style.display = 'flex';
+    atualizarVisibilidadePreEnvio();
+
+    $('input-mensagem').focus();
+}
+
+$('btn-cancelar-resposta').addEventListener('click', () => {
+    respondendoAtual = null;
+    $('pre-envio-resposta').style.display = 'none';
+    atualizarVisibilidadePreEnvio();
+});
+
+$('btn-anexar').addEventListener('click', () => $('input-arquivo').click());
+
+$('input-arquivo').addEventListener('change', () => {
+    const arquivo = $('input-arquivo').files[0];
+    if (! arquivo) return;
+
+    if (arquivo.size > 10 * 1024 * 1024) {
+        alert('Arquivo muito grande (máximo 10MB).');
+        $('input-arquivo').value = '';
+        return;
+    }
+
+    arquivoSelecionado = arquivo;
+    $('pre-arquivo-nome').textContent = '📎 ' + arquivo.name;
+    $('pre-envio-arquivo').style.display = 'flex';
+    atualizarVisibilidadePreEnvio();
+});
+
+$('btn-cancelar-arquivo').addEventListener('click', () => {
+    arquivoSelecionado = null;
+    $('input-arquivo').value = '';
+    $('pre-envio-arquivo').style.display = 'none';
+    atualizarVisibilidadePreEnvio();
+});
+
+function limparPreEnvio() {
+    respondendoAtual = null;
+    arquivoSelecionado = null;
+    $('input-arquivo').value = '';
+    $('pre-envio-resposta').style.display = 'none';
+    $('pre-envio-arquivo').style.display = 'none';
+    $('pre-envio').style.display = 'none';
+}
+
 $('form-envio').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const input = $('input-mensagem');
     const corpo = input.value.trim();
-    if (! corpo || ! conversaAtual) return;
+    if (! conversaAtual) return;
+    if (! corpo && ! arquivoSelecionado) return; // nada pra enviar
+
+    const campos = { corpo };
+    if (respondendoAtual) campos.respondendo_a = respondendoAtual.id_mensagem;
+    if (arquivoSelecionado) campos.arquivo = arquivoSelecionado;
 
     input.value = '';
     input.style.height = 'auto';
+    limparPreEnvio();
 
     try {
-        await post(`/chat/${conversaAtual.id}/enviar`, { corpo });
+        await post(`/chat/${conversaAtual.id}/enviar`, campos);
         buscarMensagensNovas();
     } catch (erro) {
         input.value = corpo; // devolve o texto pro campo pra não perder
@@ -560,10 +779,18 @@ $('input-mensagem').addEventListener('keydown', (e) => {
     }
 });
 
-// cresce junto com o texto, até uma altura máxima (o CSS trava o max-height)
+// cresce junto com o texto (até o max-height do CSS) e avisa o servidor que estou digitando
 $('input-mensagem').addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = this.scrollHeight + 'px';
+
+    if (! conversaAtual || this.value.trim() === '') return;
+
+    const agora = Date.now();
+    if (agora - ultimoEnvioDigitando > 2000) { // no máximo 1 aviso a cada 2s
+        ultimoEnvioDigitando = agora;
+        post(`/chat/${conversaAtual.id}/digitando`).catch(() => {}); // falha aqui não precisa incomodar o usuário
+    }
 });
 
 // ---------- polling ----------
@@ -597,8 +824,20 @@ async function buscarMensagensNovas() {
         if (dados.novas.length > 0 || dados.alteradas.length > 0) {
             carregarConversas();
         }
+
+        atualizarIndicadorDigitando(dados.digitando || []);
     } catch (erro) {
         console.error('Erro no polling:', erro);
+    }
+}
+
+function atualizarIndicadorDigitando(nomes) {
+    if (! nomes.length) {
+        $('indicador-digitando').textContent = '';
+    } else if (nomes.length === 1) {
+        $('indicador-digitando').textContent = `${nomes[0]} está digitando...`;
+    } else {
+        $('indicador-digitando').textContent = `${nomes.join(', ')} estão digitando...`;
     }
 }
 
@@ -689,12 +928,19 @@ async function carregarMembros() {
             const podeGerenciar = conversaAtual.ehAdmin && ! pendente && m.id_usuario != MEU_ID && ! m.eh_admin;
 
             div.innerHTML = `
-                <span>${escapeHtml(m.nome)}${m.eh_admin ? ' ⭐ admin' : ''}${pendente ? ' (convite pendente)' : ''}</span>
+                <span style="display:flex; align-items:center; gap:8px; ${pendente ? '' : 'cursor:pointer;'}" data-acao="${pendente ? '' : 'ver-perfil'}">
+                    <img class="avatar-mini" src="${avatarSrc(m.nome, m.avatar)}" alt="">
+                    ${escapeHtml(m.nome)}${m.eh_admin ? ' ⭐ admin' : ''}${pendente ? ' (convite pendente)' : ''}
+                </span>
                 ${podeGerenciar ? `<span class="acoes-membro">
                     <button type="button" data-acao="promover">Tornar admin</button>
                     <button type="button" data-acao="remover">Remover</button>
                 </span>` : ''}
             `;
+
+            if (! pendente) {
+                div.querySelector('[data-acao=ver-perfil]').addEventListener('click', () => abrirPerfilUsuario(m.id_usuario));
+            }
 
             if (podeGerenciar) {
                 div.querySelector('[data-acao=promover]').addEventListener('click', async () => {
@@ -721,6 +967,35 @@ async function carregarMembros() {
 $('btn-membros').addEventListener('click', () => {
     alternarPainel('painel-grupo');
     if ($('painel-grupo').style.display === 'block') carregarMembros();
+});
+
+$('cabecalho-chat-info').addEventListener('click', () => {
+    if (! conversaAtual) return;
+
+    if (conversaAtual.tipo === 'individual' && conversaAtual.outroId) {
+        abrirPerfilUsuario(conversaAtual.outroId);
+    } else if (conversaAtual.tipo === 'grupo') {
+        alternarPainel('painel-grupo');
+        if ($('painel-grupo').style.display === 'block') carregarMembros();
+    }
+});
+
+async function abrirPerfilUsuario(idUsuario) {
+    try {
+        const perfil = await api(`/chat/usuario/${idUsuario}/perfil`);
+
+        $('painel-grupo').style.display = 'none';
+        $('perfil-avatar-grande').src = avatarSrc(perfil.nome, perfil.avatar);
+        $('perfil-nome-exibido').textContent = perfil.nome;
+        $('perfil-recado-exibido').textContent = perfil.status || '';
+        $('painel-perfil-usuario').style.display = 'block';
+    } catch (erro) {
+        alert(erro.message);
+    }
+}
+
+$('btn-fechar-perfil-usuario').addEventListener('click', () => {
+    $('painel-perfil-usuario').style.display = 'none';
 });
 
 $('btn-sair-grupo').addEventListener('click', async () => {
@@ -763,6 +1038,8 @@ ligarBusca($('convidar-busca'), $('btn-convidar-buscar'), $('convidar-resultado'
 });
 
 // ---------- inicialização ----------
+
+$('meu-avatar').src = avatarSrc('<?= esc($meuNome, "js") ?>', <?= $meuAvatar ? "'" . esc($meuAvatar, 'js') . "'" : 'null' ?>);
 
 carregarConversas();
 carregarConvites();

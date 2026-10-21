@@ -2,13 +2,14 @@
 
 use CodeIgniter\Router\RouteCollection;
 
+// rotas de autenticação
 $routes->get('/login', 'AuthController::telaLogin');
 $routes->post('/login', 'AuthController::entrar');
 $routes->get('/cadastro', 'AuthController::telaCadastro');
 $routes->post('/cadastro', 'AuthController::cadastrar');
 $routes->get('/logout', 'AuthController::sair');
 
-
+// chat
 $routes->get('/chat', 'ChatController::index', ['filter' => 'auth']);
 $routes->get('/chat/conversas', 'ChatController::conversas', ['filter' => 'auth']);
 $routes->get('/chat/usuarios', 'ChatController::buscarUsuarios', ['filter' => 'auth']);
@@ -24,6 +25,8 @@ $routes->get('/chat/(:num)/membros', 'ChatController::membros/$1', ['filter' => 
 $routes->post('/chat/(:num)/enviar', 'ChatController::enviar/$1', ['filter' => 'auth']);
 $routes->post('/chat/(:num)/convidar', 'ChatController::convidar/$1', ['filter' => 'auth']);
 $routes->get('/chat/(:num)', 'ChatController::abrir/$1', ['filter' => 'auth']);
+$routes->get('/chat/usuario/(:num)/perfil', 'ChatController::perfilUsuario/$1', ['filter' => 'auth']);
+$routes->post('/chat/(:num)/digitando', 'ChatController::digitando/$1', ['filter' => 'auth']);
 
 // perfil
 $routes->get('/perfil', 'PerfilController::tela', ['filter' => 'auth']);

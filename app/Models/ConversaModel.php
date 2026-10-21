@@ -229,9 +229,17 @@ class ConversaModel extends Model
     public function detalhes(int $idConversa, int $idUsuario): ?array
     {
         $sql = "
-            SELECT c.id_conversa, c.tipo, c.titulo, cu.eh_admin, cu.entrou_em
+            SELECT
+                c.id_conversa, c.tipo, c.titulo, cu.eh_admin, cu.entrou_em,
+                CASE WHEN c.tipo = 'individual' THEN outro.id_usuario END AS outro_usuario_id,
+                CASE WHEN c.tipo = 'individual' THEN outro.avatar ELSE c.foto END AS foto_exibida
             FROM conversas c
             INNER JOIN conversas_usuarios cu ON cu.id_conversa = c.id_conversa
+            LEFT JOIN conversas_usuarios outro_cu
+                   ON outro_cu.id_conversa = c.id_conversa
+                  AND outro_cu.id_usuario != cu.id_usuario
+                  AND c.tipo = 'individual'
+            LEFT JOIN usuarios outro ON outro.id_usuario = outro_cu.id_usuario
             WHERE c.id_conversa = ? AND cu.id_usuario = ? AND cu.status = 'aceito'
         ";
 
@@ -397,6 +405,42 @@ class ConversaModel extends Model
         $this->update($idConversa, ['titulo' => $novoTitulo]);
 
         return true;
+    }
+
+    /**
+     * Registra que o usuário está digitando agora nessa conversa.
+     * Chamado pelo JS a cada poucos segundos enquanto a pessoa digita.
+     */
+    public function registrarDigitando(int $idConversa, int $idUsuario): void
+    {
+        $this->db->table('conversas_usuarios')
+            ->where('id_conversa', $idConversa)
+            ->where('id_usuario', $idUsuario)
+            ->update(['digitando_em' => date('Y-m-d H:i:s')]);
+    }
+
+    /**
+     * Nomes de quem (além de mim) está digitando nessa conversa AGORA
+     * (considerando "agora" como "nos últimos 4 segundos").
+     */
+    public function quemEstaDigitando(int $idConversa, int $idUsuarioAtual): array
+    {
+        $limite = date('Y-m-d H:i:s', time() - 4);
+
+        $sql = "
+            SELECT u.nome
+            FROM conversas_usuarios cu
+            INNER JOIN usuarios u ON u.id_usuario = cu.id_usuario
+            WHERE cu.id_conversa = ?
+              AND cu.id_usuario != ?
+              AND cu.status = 'aceito'
+              AND cu.digitando_em IS NOT NULL
+              AND cu.digitando_em >= ?
+        ";
+
+        $linhas = $this->db->query($sql, [$idConversa, $idUsuarioAtual, $limite])->getResultArray();
+
+        return array_column($linhas, 'nome');
     }
 
     /**
